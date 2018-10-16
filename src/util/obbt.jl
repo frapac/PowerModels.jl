@@ -98,7 +98,7 @@ function run_obbt_opf(data::Dict{String,Any}, solver;
     info(LOGGER, "maximum OBBT iterations set to default value of $max_iter")
     info(LOGGER, "maximum time limit for OBBT set to default value of $time_limit seconds")
 
-    model_relaxation = build_generic_model(data, model_constructor, PowerModels.post_opf)
+    model_relaxation = build_generic_model(data, model_constructor, PowerModels.post_opf, optimizer=solver)
     (ismultinetwork(model_relaxation)) && (error(LOGGER, "OBBT is not supported for multi-networks"))
     (ismulticonductor(model_relaxation)) && (error(LOGGER, "OBBT is not supported for multi-phase networks"))
 
@@ -133,7 +133,8 @@ function run_obbt_opf(data::Dict{String,Any}, solver;
     end
 
 
-    model_bt = build_generic_model(data, model_constructor, PowerModels.post_opf)
+
+    model_bt = build_generic_model(data, model_constructor, PowerModels.post_opf, optimizer=solver)
     (upper_bound_constraint) && (constraint_obj_bound(model_bt, upper_bound))
 
     stats = Dict{String,Any}()
@@ -147,10 +148,10 @@ function run_obbt_opf(data::Dict{String,Any}, solver;
     buses = ids(model_bt, :bus)
     buspairs = ids(model_bt, :buspairs)
 
-    vm_lb = Dict{Any,Float64}( [bus => getlowerbound(vm[bus]) for bus in buses] )
-    vm_ub = Dict{Any,Float64}( [bus => getupperbound(vm[bus]) for bus in buses] )
-    td_lb = Dict{Any,Float64}( [bp => getlowerbound(td[bp]) for bp in buspairs] )
-    td_ub = Dict{Any,Float64}( [bp => getupperbound(td[bp]) for bp in buspairs] )
+    vm_lb = Dict{Any,Float64}( [bus => JuMP.lower_bound(vm[bus]) for bus in buses] )
+    vm_ub = Dict{Any,Float64}( [bus => JuMP.upper_bound(vm[bus]) for bus in buses] )
+    td_lb = Dict{Any,Float64}( [bp => JuMP.lower_bound(td[bp]) for bp in buspairs] )
+    td_ub = Dict{Any,Float64}( [bp => JuMP.upper_bound(td[bp]) for bp in buspairs] )
 
     vm_range_init = sum([vm_ub[bus] - vm_lb[bus] for bus in buses])
     stats["vm_range_init"] = vm_range_init
@@ -202,7 +203,7 @@ function run_obbt_opf(data::Dict{String,Any}, solver;
             @objective(model_bt.model, Min, vm[bus])
             result_bt = solve_generic_model(model_bt, solver)
             if (result_bt["status"] == :LocalOptimal || result_bt["status"] == :Optimal)
-                nlb = floor(10.0^precision * getobjectivevalue(model_bt.model))/(10.0^precision)
+                nlb = floor(10.0^precision * JuMP.objective_value(model_bt.model))/(10.0^precision)
                 (nlb > vm_lb[bus]) && (lb = nlb)
             else
                 warn(LOGGER, "BT minimization problem for vm[$bus] errored - change tolerances.")
@@ -214,7 +215,7 @@ function run_obbt_opf(data::Dict{String,Any}, solver;
             @objective(model_bt.model, Max, vm[bus])
             result_bt = solve_generic_model(model_bt, solver)
             if (result_bt["status"] == :LocalOptimal || result_bt["status"] == :Optimal)
-                nub = ceil(10.0^precision * getobjectivevalue(model_bt.model))/(10.0^precision)
+                nub = ceil(10.0^precision * JuMP.objective_value(model_bt.model))/(10.0^precision)
                 (nub < vm_ub[bus]) && (ub = nub)
             else
                 warn(LOGGER, "BT maximization problem for vm[$bus] errored - change tolerances.")
@@ -262,7 +263,7 @@ function run_obbt_opf(data::Dict{String,Any}, solver;
             @objective(model_bt.model, Min, td[bp])
             result_bt = solve_generic_model(model_bt, solver)
             if (result_bt["status"] == :LocalOptimal || result_bt["status"] == :Optimal)
-                nlb = floor(10.0^precision * getobjectivevalue(model_bt.model))/(10.0^precision)
+                nlb = floor(10.0^precision * JuMP.objective_value(model_bt.model))/(10.0^precision)
                 (nlb > td_lb[bp]) && (lb = nlb)
             else
                 warn(LOGGER, "BT minimization problem for td[$bp] errored - change tolerances")
@@ -274,7 +275,7 @@ function run_obbt_opf(data::Dict{String,Any}, solver;
             @objective(model_bt.model, Max, td[bp])
             result_bt = solve_generic_model(model_bt, solver)
             if (result_bt["status"] == :LocalOptimal || result_bt["status"] == :Optimal)
-                nub = ceil(10.0^precision * getobjectivevalue(model_bt.model))/(10.0^precision)
+                nub = ceil(10.0^precision * JuMP.objective_value(model_bt.model))/(10.0^precision)
                 (nub < td_ub[bp]) && (ub = nub)
             else
                 warn(LOGGER, "BT maximization problem for td[$bp] errored - change tolerances.")
@@ -320,7 +321,7 @@ function run_obbt_opf(data::Dict{String,Any}, solver;
         # populate the modifications, update the data, and rebuild the bound-tightening model
         modifications = create_modifications(model_bt, vm_lb, vm_ub, td_lb, td_ub)
         PowerModels.update_data(data, modifications)
-        model_bt = build_generic_model(data, model_constructor, PowerModels.post_opf)
+        model_bt = build_generic_model(data, model_constructor, PowerModels.post_opf, optimizer=solver)
         (upper_bound_constraint) && (constraint_obj_bound(model_bt, upper_bound))
         vm = var(model_bt, :vm)
         td = var(model_bt, :td)

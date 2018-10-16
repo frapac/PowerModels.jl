@@ -30,8 +30,6 @@ before_install:
       julia -e 'using Pkg; Pkg.update()'
     fi
 
-
-
 script:
 - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
 - |

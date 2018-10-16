@@ -3,8 +3,8 @@ function build_solution(pm::GenericPowerModel, status, solve_time; objective = N
     # TODO @assert that the model is solved
 
     if status != :Error
-        objective = getobjectivevalue(pm.model)
-        status = solver_status_dict(Symbol(typeof(pm.model.solver).name.module), status)
+        objective = JuMP.objective_value(pm.model)
+        status = solver_status_dict(Symbol(typeof(pm.model.moi_backend).name.module), status)
     end
 
     sol = init_solution(pm)
@@ -38,7 +38,7 @@ function build_solution(pm::GenericPowerModel, status, solve_time; objective = N
     end
 
     solution = Dict{String,Any}(
-        "solver" => string(typeof(pm.model.solver)),
+        "solver" => string(typeof(pm.model.moi_backend)),
         "status" => status,
         "objective" => objective,
         "objective_lb" => guard_getobjbound(pm.model),
@@ -179,10 +179,10 @@ function add_setpoint(
             sol_item[param_name] = default_value(item)
             try
                 variable = extract_var(var(pm, variable_symbol), idx, item)
-                if applicable(scale, getvalue(variable), item, 1) # TODO remove on next breaking release
-                    sol_item[param_name] = scale(getvalue(variable), item, 1)
+                if applicable(scale, JuMP.result_value(variable), item, 1) # TODO remove on next breaking release
+                    sol_item[param_name] = scale(JuMP.result_value(variable), item, 1)
                 else
-                    sol_item[param_name] = scale(getvalue(variable), item)
+                    sol_item[param_name] = scale(JuMP.result_value(variable), item)
                 end
             catch
             end
@@ -193,10 +193,10 @@ function add_setpoint(
             for conductor in conductor_ids(pm)
                 try
                     variable = extract_var(var(pm, variable_symbol, cnd=conductor), idx, item)
-                    if applicable(scale, getvalue(variable), item, conductor) # TODO remove on next breaking release
-                        sol_item[param_name][cnd_idx] = scale(getvalue(variable), item, conductor)
+                    if applicable(scale, JuMP.result_value(variable), item, conductor) # TODO remove on next breaking release
+                        sol_item[param_name][cnd_idx] = scale(JuMP.result_value(variable), item, conductor)
                     else
-                        sol_item[param_name][cnd_idx] = scale(getvalue(variable), item)
+                        sol_item[param_name][cnd_idx] = scale(JuMP.result_value(variable), item)
                     end
                 catch
                 end
@@ -273,10 +273,10 @@ function add_dual(
             sol_item[param_name] = default_value(item)
             try
                 constraint = extract_con(var(pm, con_symbol), idx, item)
-                if applicable(scale, getdual(constraint), item, 1) # TODO remove on next breaking release
-                    sol_item[param_name] = scale(getdual(constraint), item, 1)
+                if applicable(scale, JuMP.result_dual(constraint), item, 1) # TODO remove on next breaking release
+                    sol_item[param_name] = scale(JuMP.result_dual(constraint), item, 1)
                 else
-                    sol_item[param_name] = scale(getdual(constraint), item)
+                    sol_item[param_name] = scale(JuMP.result_dual(constraint), item)
                 end
             catch
             end
@@ -287,10 +287,10 @@ function add_dual(
             for conductor in conductor_ids(pm)
                 try
                     constraint = extract_con(con(pm, con_symbol, cnd=conductor), idx, item)
-                    if applicable(scale, getdual(constraint), item, conductor) # TODO remove on next breaking release
-                        sol_item[param_name][cnd_idx] = scale(getdual(constraint), item, conductor)
+                    if applicable(scale, JuMP.result_dual(constraint), item, conductor) # TODO remove on next breaking release
+                        sol_item[param_name][cnd_idx] = scale(JuMP.result_dual(constraint), item, conductor)
                     else
-                        sol_item[param_name][cnd_idx] = scale(getdual(constraint), item)
+                        sol_item[param_name][cnd_idx] = scale(JuMP.result_dual(constraint), item)
                     end
                 catch
                     info(LOGGER, "No constraint: $(con_symbol), $(idx)")

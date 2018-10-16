@@ -207,7 +207,7 @@ end
 
                 for c in 1:mp_data["conductors"]
                     @test branch["mu_sm_fr"][c] >= -1 && branch["mu_sm_fr"][c] <= 6000
-                    @test isnan(branch["mu_sm_to"][c])
+                    @test branch["mu_sm_to"][c] >= -1 && branch["mu_sm_to"][c] <= 1
                 end
             end
 

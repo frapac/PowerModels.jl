@@ -75,7 +75,7 @@ mutable struct GenericPowerModel{T<:AbstractPowerFormulation}
 end
 
 # default generic constructor
-function GenericPowerModel(data::Dict{String,Any}, T::DataType; ext = Dict{Symbol,Any}(), setting = Dict{String,Any}(), solver = JuMP.UnsetSolver())
+function GenericPowerModel(data::Dict{String,Any}, T::DataType; ext = Dict{String,Any}(), setting = Dict{String,Any}(), optimizer = nothing)
 
     # TODO is may be a good place to check component connectivity validity
     # i.e. https://github.com/lanl-ansi/PowerModels.jl/issues/131
@@ -101,7 +101,7 @@ function GenericPowerModel(data::Dict{String,Any}, T::DataType; ext = Dict{Symbo
     ccnd = minimum([k for k in keys(var[:nw][cnw][:cnd])])
 
     pm = GenericPowerModel{T}(
-        Model(solver = solver), # model
+        Model(),
         data,
         setting,
         Dict{String,Any}(), # solution
@@ -112,6 +112,10 @@ function GenericPowerModel(data::Dict{String,Any}, T::DataType; ext = Dict{Symbo
         ccnd,
         ext
     )
+
+    if optimizer != nothing
+        pm.model = Model(optimizer)
+    end
 
     return pm
 end
@@ -167,21 +171,46 @@ con(pm::GenericPowerModel, key::Symbol, idx; nw::Int=pm.cnw, cnd::Int=pm.ccnd) =
 
 
 
-# TODO Ask Miles, why do we need to put JuMP. here?  using at top level should bring it in
-function JuMP.setsolver(pm::GenericPowerModel, solver::MathProgBase.AbstractMathProgSolver)
-    setsolver(pm.model, solver)
-end
+function optimize!(pm::GenericPowerModel)
+    _, timed_time, solve_bytes_alloc, sec_in_gc = @timed JuMP.optimize!(pm.model)
 
-function JuMP.solve(pm::GenericPowerModel)
-    status, solve_time, solve_bytes_alloc, sec_in_gc = @timed solve(pm.model)
+    ts = JuMP.termination_status(pm.model)
+    ps = JuMP.primal_status(pm.model)
+    ds = JuMP.dual_status(pm.model)
 
+
+    #=
+    # prefered method, falling back on try-catch
+    if MOI.supports(pm.model, MOI.SolveTime())
+        solve_time = MOI.get(pm.model, MOI.SolveTime())
+    else
+        warn(LOGGER, "the given optimizer does not provide the SolveTime() attribute, falling back on @timed.  This is not a rigorous timing value.");
+        solve_time = timed_time
+    end
+    =#
+
+    solve_time = nothing
     try
-        solve_time = getsolvetime(pm.model)
+        solve_time = MOI.get(pm.model, MOI.SolveTime())
     catch
-        warn(LOGGER, "there was an issue with getsolvetime() on the solver, falling back on @timed.  This is not a rigorous timing value.");
+        warn(LOGGER, "the given optimizer does not provide the SolveTime() attribute, falling back on @timed.  This is not a rigorous timing value.");
+        solve_time = timed_time
     end
 
-    return status, solve_time
+    if ts == MOI.Success
+        #if ps == MOI.FeasiblePoint && ds == MOI.FeasiblePoint
+        #    return :Optimal, solve_time
+        #end
+        if ps == MOI.FeasiblePoint
+            return :LocalOptimal, solve_time
+        end
+        return :LocalInfeasible, solve_time
+    end
+
+    return :Error, solve_time
+
+    # future return type
+    #return ts, ps, ds, real_solve_time
 end
 
 ""
@@ -192,7 +221,7 @@ end
 
 ""
 function run_generic_model(data::Dict{String,Any}, model_constructor, solver, post_method; solution_builder = get_solution, kwargs...)
-    pm = build_generic_model(data, model_constructor, post_method; kwargs...)
+    pm = build_generic_model(data, model_constructor, post_method; optimizer=solver, kwargs...)
 
     solution = solve_generic_model(pm, solver; solution_builder = solution_builder)
 
@@ -224,10 +253,12 @@ function build_generic_model(data::Dict{String,Any}, model_constructor, post_met
 end
 
 ""
-function solve_generic_model(pm::GenericPowerModel, solver; solution_builder = get_solution)
-    setsolver(pm.model, solver)
+function solve_generic_model(pm::GenericPowerModel, optimizer::JuMP.OptimizerFactory; solution_builder = get_solution)
+    #TODO, for now the optimizer must be specified at the time of JuMP model instantiation
+    #MOI.empty!(optimizer)
+    #MOIU.resetoptimizer!(pm.model, optimizer)
 
-    status, solve_time = solve(pm)
+    status, solve_time = optimize!(pm)
 
     return build_solution(pm, status, solve_time; solution_builder = solution_builder)
 end

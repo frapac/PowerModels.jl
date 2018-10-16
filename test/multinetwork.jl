@@ -222,7 +222,7 @@ TESTLOG = getlogger(PowerModels)
                     @test haskey(branch, "mu_sm_fr")
                     @test branch["mu_sm_fr"] >= -1 && branch["mu_sm_fr"] <= 6000
                     @test haskey(branch, "mu_sm_to")
-                    @test isnan(branch["mu_sm_to"])
+                    @test isapprox(branch["mu_sm_to"], 0.0, atol=1e-4)
                 end
             end
         end
