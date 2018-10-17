@@ -74,8 +74,8 @@ uuid = "f6369f11-7733-5829-9624-2563aa707210"
 version = "0.9.0"
 
 [[InfrastructureModels]]
-deps = ["Compat", "JuMP", "Juniper", "LinearAlgebra", "Memento"]
-git-tree-sha1 = "de82d533f0e249428e9db6b2e7ef7fbc0a905c4a"
+deps = ["Compat", "JuMP", "Juniper", "LinearAlgebra", "MathOptInterface", "Memento"]
+git-tree-sha1 = "c96fd194a82592b889be5d55f82c9648321786db"
 repo-rev = "moi"
 repo-url = "https://github.com/lanl-ansi/InfrastructureModels.jl.git"
 uuid = "e8e45514-c753-11e8-2a1b-cd93cb9d98d1"
@@ -101,7 +101,7 @@ version = "0.18.4+"
 
 [[Juniper]]
 deps = ["Distributed", "JSON", "JuMP", "LinearAlgebra", "MathProgBase", "Random", "Statistics"]
-git-tree-sha1 = "e235a094773ad24197781d247b8158c3d3060e6b"
+git-tree-sha1 = "a9bad433a38ac93e7b954ab7b125047f4b2fb180"
 repo-rev = "0.7"
 repo-url = "https://github.com/lanl-ansi/Juniper.jl.git"
 uuid = "2ddba703-00a4-53a7-87a5-e8b9971dde84"
