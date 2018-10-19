@@ -75,7 +75,7 @@ mutable struct GenericPowerModel{T<:AbstractPowerFormulation}
 end
 
 # default generic constructor
-function GenericPowerModel(data::Dict{String,Any}, T::DataType; ext = Dict{String,Any}(), setting = Dict{String,Any}(), optimizer = nothing)
+function GenericPowerModel(data::Dict{String,Any}, T::DataType; ext = Dict{Symbol,Any}(), setting = Dict{String,Any}(), optimizer = nothing, jump_model = nothing)
 
     # TODO is may be a good place to check component connectivity validity
     # i.e. https://github.com/lanl-ansi/PowerModels.jl/issues/131
@@ -100,8 +100,20 @@ function GenericPowerModel(data::Dict{String,Any}, T::DataType; ext = Dict{Strin
     cnw = minimum([k for k in keys(var[:nw])])
     ccnd = minimum([k for k in keys(var[:nw][cnw][:cnd])])
 
+    if jump_model == nothing
+        if optimizer == nothing
+            jump_model = Model()
+        else
+            jump_model = Model(optimizer)
+        end
+    end
+
+    if jump_model != nothing && optimizer != nothing
+        warn(LOGGER, "the provided optimizer will not be used because a JuMP model was provided, the optimizer provided with the JuMP model will be used.")
+    end
+
     pm = GenericPowerModel{T}(
-        Model(),
+        jump_model,
         data,
         setting,
         Dict{String,Any}(), # solution
@@ -112,10 +124,6 @@ function GenericPowerModel(data::Dict{String,Any}, T::DataType; ext = Dict{Strin
         ccnd,
         ext
     )
-
-    if optimizer != nothing
-        pm.model = Model(optimizer)
-    end
 
     return pm
 end
