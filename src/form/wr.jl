@@ -1,53 +1,5 @@
-export
-    SOCWRPowerModel, SOCWRForm,
-    QCWRPowerModel, QCWRForm,
-    SOCWRConicPowerModel, SOCWRConicForm,
-    QCWRTriPowerModel, QCWRTriForm
+### quadratic relaxations in the rectangular W-space (e.g. SOC and QC relaxations)
 
-""
-abstract type AbstractWRForm <: AbstractPowerFormulation end
-
-""
-abstract type AbstractWRConicForm <: AbstractConicPowerFormulation end
-
-""
-abstract type SOCWRConicForm <: AbstractWRConicForm end
-
-""
-abstract type SOCWRForm <: AbstractWRForm end
-
-"""
-Second-order cone relaxation of bus injection model of AC OPF.
-
-The implementation casts this as a convex quadratically constrained problem.
-```
-@article{1664986,
-  author={R. A. Jabr},
-  title={Radial distribution load flow using conic programming},
-  journal={IEEE Transactions on Power Systems},
-  year={2006},
-  month={Aug},
-  volume={21},
-  number={3},
-  pages={1458-1459},
-  doi={10.1109/TPWRS.2006.879234},
-  ISSN={0885-8950}
-}
-```
-"""
-const SOCWRPowerModel = GenericPowerModel{SOCWRForm}
-
-"""
-Second-order cone relaxation of bus injection model of AC OPF.
-
-This implementation casts the problem as a convex conic problem.
-"""
-const SOCWRConicPowerModel = GenericPowerModel{SOCWRConicForm}
-
-"default SOC constructor"
-SOCWRPowerModel(data::Dict{String,Any}; kwargs...) = GenericPowerModel(data, SOCWRForm; kwargs...)
-
-SOCWRConicPowerModel(data::Dict{String,Any}; kwargs...) = GenericPowerModel(data, SOCWRConicForm; kwargs...)
 
 ""
 function variable_voltage(pm::GenericPowerModel{T}; kwargs...) where T <: AbstractWRForm
@@ -157,7 +109,7 @@ function constraint_voltage_ne(pm::GenericPowerModel{T}, n::Int, c::Int) where T
     branches = ref(pm, n, :ne_branch)
 
     wr_min, wr_max, wi_min, wi_max = calc_voltage_product_bounds(ref(pm, n, :ne_buspairs))
-    bi_bp = Dict([(i, (b["f_bus"], b["t_bus"])) for (i,b) in branches])
+    bi_bp = Dict((i, (b["f_bus"], b["t_bus"])) for (i,b) in branches)
 
     w  = var(pm, n, c, :w)
     wr = var(pm, n, c, :wr_ne)
@@ -247,7 +199,7 @@ end
 function constraint_voltage_product_on_off(pm::GenericPowerModel{T}, n::Int, c::Int) where T <: AbstractWRForm
     wr_min, wr_max, wi_min, wi_max = calc_voltage_product_bounds(ref(pm, n, :buspairs), c)
 
-    bi_bp = Dict([(i, (b["f_bus"], b["t_bus"])) for (i,b) in ref(pm, n, :branch)])
+    bi_bp = Dict((i, (b["f_bus"], b["t_bus"])) for (i,b) in ref(pm, n, :branch))
 
     wr = var(pm, n, c, :wr)
     wi = var(pm, n, c, :wi)
@@ -355,7 +307,7 @@ end
 ""
 function variable_voltage_product_ne(pm::GenericPowerModel{T}; nw::Int=pm.cnw, cnd::Int=pm.ccnd) where T <: AbstractWRForm
     wr_min, wr_max, wi_min, wi_max = calc_voltage_product_bounds(ref(pm, nw, :ne_buspairs), cnd)
-    bi_bp = Dict([(i, (b["f_bus"], b["t_bus"])) for (i,b) in ref(pm, nw, :ne_branch)])
+    bi_bp = Dict((i, (b["f_bus"], b["t_bus"])) for (i,b) in ref(pm, nw, :ne_branch))
 
     var(pm, nw, cnd)[:wr_ne] = @variable(pm.model,
         [b in ids(pm, nw, :ne_branch)], base_name="$(nw)_$(cnd)_wr_ne",
@@ -374,35 +326,7 @@ end
 
 
 
-
-
-""
-abstract type QCWRForm <: AbstractWRForm end
-
-"""
-"Quadratic-Convex" relaxation of AC OPF
-```
-@Article{Hijazi2017,
-  author="Hijazi, Hassan and Coffrin, Carleton and Hentenryck, Pascal Van",
-  title="Convex quadratic relaxations for mixed-integer nonlinear programs in power systems",
-  journal="Mathematical Programming Computation",
-  year="2017",
-  month="Sep",
-  volume="9",
-  number="3",
-  pages="321--367",
-  issn="1867-2957",
-  doi="10.1007/s12532-016-0112-z",
-  url="https://doi.org/10.1007/s12532-016-0112-z"
-}
-```
-"""
-const QCWRPowerModel = GenericPowerModel{QCWRForm}
-
-"default QC constructor"
-function QCWRPowerModel(data::Dict{String,Any}; kwargs...)
-    return GenericPowerModel(data, QCWRForm; kwargs...)
-end
+###### QC Relaxations ######
 
 
 "Creates variables associated with differences in voltage angles"
@@ -426,45 +350,6 @@ function variable_voltage_magnitude_product(pm::GenericPowerModel{T}; nw::Int=pm
     )
 end
 
-""
-function variable_cosine(pm::GenericPowerModel{T}; nw::Int=pm.cnw, cnd::Int=pm.ccnd) where T
-    cos_min = Dict([(bp, -Inf) for bp in ids(pm, nw, :buspairs)])
-    cos_max = Dict([(bp,  Inf) for bp in ids(pm, nw, :buspairs)])
-
-    for (bp, buspair) in ref(pm, nw, :buspairs)
-        angmin = buspair["angmin"][cnd]
-        angmax = buspair["angmax"][cnd]
-        if angmin >= 0
-            cos_max[bp] = cos(angmin)
-            cos_min[bp] = cos(angmax)
-        end
-        if angmax <= 0
-            cos_max[bp] = cos(angmax)
-            cos_min[bp] = cos(angmin)
-        end
-        if angmin < 0 && angmax > 0
-            cos_max[bp] = 1.0
-            cos_min[bp] = min(cos(angmin), cos(angmax))
-        end
-    end
-
-    var(pm, nw, cnd)[:cs] = @variable(pm.model,
-        [bp in ids(pm, nw, :buspairs)], base_name="$(nw)_$(cnd)_cs",
-        lower_bound = cos_min[bp],
-        upper_bound = cos_max[bp],
-        start = getval(ref(pm, nw, :buspairs, bp), "cs_start", cnd, 1.0)
-    )
-end
-
-""
-function variable_sine(pm::GenericPowerModel; nw::Int=pm.cnw, cnd::Int=pm.ccnd)
-    var(pm, nw, cnd)[:si] = @variable(pm.model,
-        [bp in ids(pm, nw, :buspairs)], base_name="$(nw)_$(cnd)_si",
-        lower_bound = sin(ref(pm, nw, :buspairs, bp, "angmin", cnd)),
-        upper_bound = sin(ref(pm, nw, :buspairs, bp, "angmax", cnd)),
-        start = getval(ref(pm, nw, :buspairs, bp), "si_start", cnd)
-    )
-end
 
 ""
 function variable_current_magnitude_sqr(pm::GenericPowerModel{T}; nw::Int=pm.cnw, cnd::Int=pm.ccnd) where T
@@ -639,8 +524,8 @@ function variable_voltage_magnitude_product_on_off(pm::GenericPowerModel{T}; nw:
     branches = ref(pm, nw, :branch)
     buses = ref(pm, nw, :bus)
 
-    vv_min = Dict([(l, buses[branch["f_bus"]]["vmin"][cnd]*buses[branch["t_bus"]]["vmin"][cnd]) for (l, branch) in branches])
-    vv_max = Dict([(l, buses[branch["f_bus"]]["vmax"][cnd]*buses[branch["t_bus"]]["vmax"][cnd]) for (l, branch) in branches])
+    vv_min = Dict((l, buses[branch["f_bus"]]["vmin"][cnd]*buses[branch["t_bus"]]["vmin"][cnd]) for (l, branch) in branches)
+    vv_max = Dict((l, buses[branch["f_bus"]]["vmax"][cnd]*buses[branch["t_bus"]]["vmax"][cnd]) for (l, branch) in branches)
 
     var(pm, nw, cnd)[:vv] = @variable(pm.model,
         [l in ids(pm, nw, :branch)], base_name="$(nw)_$(cnd)_vv",
@@ -653,8 +538,8 @@ end
 
 ""
 function variable_cosine_on_off(pm::GenericPowerModel{T}; nw::Int=pm.cnw, cnd::Int=pm.ccnd) where T
-    cos_min = Dict([(l, -Inf) for l in ids(pm, nw, :branch)])
-    cos_max = Dict([(l,  Inf) for l in ids(pm, nw, :branch)])
+    cos_min = Dict((l, -Inf) for l in ids(pm, nw, :branch))
+    cos_max = Dict((l,  Inf) for l in ids(pm, nw, :branch))
 
     for (l, branch) in ref(pm, nw, :branch)
         angmin = branch["angmin"][cnd]
@@ -694,7 +579,7 @@ end
 
 ""
 function variable_current_magnitude_sqr_on_off(pm::GenericPowerModel{T}; nw::Int=pm.cnw, cnd::Int=pm.ccnd) where T
-    cm_min = Dict([(l, 0) for l in ids(pm, nw, :branch)])
+    cm_min = Dict((l, 0) for l in ids(pm, nw, :branch))
 
     branches = ref(pm, nw, :branch)
     cm_max = Dict()
@@ -811,33 +696,7 @@ function constraint_power_magnitude_link_on_off(pm::GenericPowerModel{T}, n::Int
 end
 
 
-""
-abstract type QCWRTriForm <: QCWRForm end
 
-"""
-"Quadratic-Convex" relaxation of AC OPF with convex hull of triple product
-```
-@Article{Hijazi2017,
-  author="Hijazi, Hassan and Coffrin, Carleton and Hentenryck, Pascal Van",
-  title="Convex quadratic relaxations for mixed-integer nonlinear programs in power systems",
-  journal="Mathematical Programming Computation",
-  year="2017",
-  month="Sep",
-  volume="9",
-  number="3",
-  pages="321--367",
-  issn="1867-2957",
-  doi="10.1007/s12532-016-0112-z",
-  url="https://doi.org/10.1007/s12532-016-0112-z"
-}
-```
-"""
-const QCWRTriPowerModel = GenericPowerModel{QCWRTriForm}
-
-"default QC trilinear model constructor"
-function QCWRTriPowerModel(data::Dict{String,Any}; kwargs...)
-    return GenericPowerModel(data, QCWRTriForm; kwargs...)
-end
 
 ""
 function variable_voltage_magnitude_product(pm::GenericPowerModel{T}; nw::Int=pm.cnw, cnd::Int=pm.ccnd) where T <: QCWRTriForm

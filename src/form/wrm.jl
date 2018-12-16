@@ -1,9 +1,5 @@
-export
-    SDPWRMPowerModel, SDPWRMForm,
-    SparseSDPWRMPowerModel, SparseSDPWRMForm
+### sdp relaxations in the rectangular W-space
 
-""
-abstract type AbstractWRMForm <: AbstractConicPowerFormulation end
 
 ""
 function constraint_current_limit(pm::GenericPowerModel{T}, n::Int, c::Int, f_idx, c_rating_a) where T <: AbstractWRMForm
@@ -23,48 +19,6 @@ end
 
 
 
-
-""
-abstract type SDPWRMForm <: AbstractWRMForm end
-
-"""
-Semi-definite relaxation of AC OPF
-
-Originally proposed by:
-```
-@article{BAI2008383,
-  author = "Xiaoqing Bai and Hua Wei and Katsuki Fujisawa and Yong Wang",
-  title = "Semidefinite programming for optimal power flow problems",
-  journal = "International Journal of Electrical Power & Energy Systems",
-  volume = "30",
-  number = "6",
-  pages = "383 - 392",
-  year = "2008",
-  issn = "0142-0615",
-  doi = "https://doi.org/10.1016/j.ijepes.2007.12.003",
-  url = "http://www.sciencedirect.com/science/article/pii/S0142061507001378",
-}
-```
-First paper to use "W" variables in the BIM of AC OPF:
-```
-@INPROCEEDINGS{6345272,
-  author={S. Sojoudi and J. Lavaei},
-  title={Physics of power networks makes hard optimization problems easy to solve},
-  booktitle={2012 IEEE Power and Energy Society General Meeting},
-  year={2012},
-  month={July},
-  pages={1-8},
-  doi={10.1109/PESGM.2012.6345272},
-  ISSN={1932-5517}
-}
-```
-"""
-const SDPWRMPowerModel = GenericPowerModel{SDPWRMForm}
-
-""
-SDPWRMPowerModel(data::Dict{String,Any}; kwargs...) = GenericPowerModel(data, SDPWRMForm; kwargs...)
-
-
 ""
 function constraint_voltage(pm::GenericPowerModel{T}, nw::Int, cnd::Int) where T <: SDPWRMForm
     WR = var(pm, nw, cnd)[:WR]
@@ -80,7 +34,7 @@ function variable_voltage(pm::GenericPowerModel{T}; nw::Int=pm.cnw, cnd::Int=pm.
     bus_ids = ids(pm, nw, :bus)
 
     w_index = 1:length(bus_ids)
-    lookup_w_index = Dict([(bi,i) for (i,bi) in enumerate(bus_ids)])
+    lookup_w_index = Dict((bi,i) for (i,bi) in enumerate(bus_ids))
 
     wr_start = ones(length(bus_ids), length(bus_ids))
     wi_start = zeros(length(bus_ids), length(bus_ids))
@@ -146,47 +100,8 @@ end
 
 
 
+###### Sparse SDP Relaxations ######
 
-abstract type SparseSDPWRMForm <: SDPWRMForm end
-
-"""
-Sparsity-exploiting semidefinite relaxation of AC OPF
-
-Proposed in:
-```
-@article{doi:10.1137/S1052623400366218,
-  author = {Fukuda, M. and Kojima, M. and Murota, K. and Nakata, K.},
-  title = {Exploiting Sparsity in Semidefinite Programming via Matrix Completion I: General Framework},
-  journal = {SIAM Journal on Optimization},
-  volume = {11},
-  number = {3},
-  pages = {647-674},
-  year = {2001},
-  doi = {10.1137/S1052623400366218},
-  URL = {https://doi.org/10.1137/S1052623400366218},
-  eprint = {https://doi.org/10.1137/S1052623400366218}
-}
-```
-Original application to OPF by:
-```
-@ARTICLE{6064917,
-  author={R. A. Jabr},
-  title={Exploiting Sparsity in SDP Relaxations of the OPF Problem},
-  journal={IEEE Transactions on Power Systems},
-  volume={27},
-  number={2},
-  pages={1138-1139},
-  year={2012},
-  month={May},
-  doi={10.1109/TPWRS.2011.2170772},
-  ISSN={0885-8950}
-}
-```
-"""
-const SparseSDPWRMPowerModel = GenericPowerModel{SparseSDPWRMForm}
-
-""
-SparseSDPWRMPowerModel(data::Dict{String,Any}; kwargs...) = GenericPowerModel(data, SparseSDPWRMForm; kwargs...)
 
 struct SDconstraintDecomposition
     "Each sub-vector consists of bus IDs corresponding to a clique grouping"
@@ -211,18 +126,19 @@ function variable_voltage(pm::GenericPowerModel{T}; nw::Int=pm.cnw, cnd::Int=pm.
         decomp = pm.ext[:SDconstraintDecomposition]
         groups = decomp.decomp
         lookup_index = decomp.lookup_index
-        lookup_bus_index = map(reverse, lookup_index)
+        lookup_bus_index = Dict((reverse(p) for p = pairs(lookup_index)))
     else
         cadj, lookup_index, ordering = chordal_extension(pm)
         groups = maximal_cliques(cadj)
-        lookup_bus_index = map(reverse, lookup_index)
+        lookup_bus_index = Dict((reverse(p) for p = pairs(lookup_index)))
         groups = [[lookup_bus_index[gi] for gi in g] for g in groups]
         pm.ext[:SDconstraintDecomposition] = SDconstraintDecomposition(groups, lookup_index, ordering)
     end
 
     voltage_product_groups =
         var(pm, nw, cnd)[:voltage_product_groups] =
-        Vector{Dict{Any,Any}}(length(groups))
+        Vector{Dict{Symbol, Array{JuMP.Variable, 2}}}(undef, length(groups))
+        #Vector{Dict{Any,Any}}(length(groups))
 
     for (gidx, group) in enumerate(groups)
         n = length(group)
@@ -338,7 +254,7 @@ function constraint_voltage(pm::GenericPowerModel{T}, nw::Int, cnd::Int) where T
 
     # linking constraints
     tree = prim(overlap_graph(groups))
-    overlapping_pairs = [ind2sub(tree, i) for i in find(tree)]
+    overlapping_pairs = [ind2sub(tree, i) for i in (LinearIndices(tree))[findall(x->x!=0, tree)]]
     for (i, j) in overlapping_pairs
         gi, gj = groups[i], groups[j]
         var_i, var_j = voltage_product_groups[i], voltage_product_groups[j]
@@ -368,7 +284,7 @@ function adjacency_matrix(pm::GenericPowerModel, nw::Int=pm.cnw)
     nb = length(bus_ids)
     nl = length(buspairs)
 
-    lookup_index = Dict([(bi, i) for (i, bi) in enumerate(bus_ids)])
+    lookup_index = Dict((bi, i) for (i, bi) in enumerate(bus_ids))
     f = [lookup_index[bp[1]] for bp in keys(buspairs)]
     t = [lookup_index[bp[2]] for bp in keys(buspairs)]
 
@@ -388,13 +304,14 @@ of the bus with `bus_id` in the adjacency matrix.
 function chordal_extension(pm::GenericPowerModel, nw::Int=pm.cnw)
     adj, lookup_index = adjacency_matrix(pm, nw)
     nb = size(adj, 1)
-    diag_el = sum(adj, 1)[:]
+    diag_el = PowerModels.pm_sum(adj, dims=1)[:]
     W = Hermitian(adj + spdiagm(diag_el, 0))
 
-    F = cholfact(W)
+    F = cholesky(W)
     L = sparse(F.L)
     p = F.p
     q = invperm(p)
+
     Rchol = L - spdiagm(diag(L), 0)
     f_idx, t_idx, V = findnz(Rchol)
     cadj = sparse([f_idx;t_idx], [t_idx;f_idx], trues(2*length(f_idx)), nb, nb)
@@ -414,7 +331,7 @@ function maximal_cliques(cadj::SparseMatrixCSC, peo::Vector{Int})
     # use peo to obtain one clique for each vertex
     cliques = Vector(undef, nb)
     for (i, v) in enumerate(peo)
-        Nv = findall(cadj[:, v])
+        Nv = findall(x->x!=0, cadj[:, v])
         cliques[i] = union(v, intersect(Nv, peo[i+1:end]))
     end
 
@@ -448,7 +365,7 @@ function mcs(A)
         filter!(x -> x != z, unnumbered)
         peo[i] = z
 
-        Nz = findall(A[:, z])
+        Nz = findall(x->x!=0, A[:, z])
         for y in intersect(Nz, unnumbered)
             w[y] += 1
         end
@@ -474,7 +391,7 @@ function prim(A, minweight=false)
         current_node = next_node
         filter!(node -> node != current_node, unvisited)
 
-        neighbors = intersect(findall(A[:, current_node]), unvisited)
+        neighbors = intersect(findall(x->x!=0, A[:, current_node]), unvisited)
         current_node_edges = [(current_node, i) for i in neighbors]
         append!(candidate_edges, current_node_edges)
         filter!(edge -> length(intersect(edge, unvisited)) == 1, candidate_edges)
@@ -535,8 +452,8 @@ Thus, A[idx_a] == B[idx_b].
 function overlap_indices(A::Array, B::Array, symmetric=true)
     overlap = intersect(A, B)
     symmetric && filter_flipped_pairs!(overlap)
-    idx_a = [findfirst(A, o) for o in overlap]
-    idx_b = [findfirst(B, o) for o in overlap]
+    idx_a = [something(findfirst(isequal(o), A), 0) for o in overlap]
+    idx_b = [something(findfirst(isequal(o), B), 0) for o in overlap]
     return idx_a, idx_b
 end
 

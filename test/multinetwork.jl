@@ -100,11 +100,8 @@ TESTLOG = getlogger(PowerModels)
             case7_data = mn_data["nw"]["1"]
             case14_data = mn_data["nw"]["2"]
 
-            case7_active_buses = Dict([x for x in case7_data["bus"] if x.second["bus_type"] != 4])
-            case14_active_buses = Dict([x for x in case14_data["bus"] if x.second["bus_type"] != 4])
-
-            #case7_active_buses = filter((i, bus) -> bus["bus_type"] != 4, case7_data["bus"])
-            #case14_active_buses = filter((i, bus) -> bus["bus_type"] != 4, case14_data["bus"])
+            case7_active_buses = Dict(x for x in case7_data["bus"] if x.second["bus_type"] != 4)
+            case14_active_buses = Dict(x for x in case14_data["bus"] if x.second["bus_type"] != 4)
 
             @test length(case7_active_buses) == 3
             @test length(case14_active_buses) == 14
@@ -252,6 +249,39 @@ TESTLOG = getlogger(PowerModels)
             @test result["status"] == :LocalOptimal
             @test isapprox(result["objective"], 78765.8; atol = 1e0)
         end
+    end
+
+
+    @testset "opf with storage case" begin
+        mn_data = build_mn_data("../test/data/matpower/case5_strg.m", replicates=4)
+
+        @testset "test ac polar opf" begin
+            result = PowerModels.run_mn_strg_opf(mn_data, PowerModels.ACPPowerModel, ipopt_solver)
+
+            @test result["status"] == :LocalOptimal
+            @test isapprox(result["objective"], 70435.9; atol = 1e0)
+
+            for (n, network) in result["solution"]["nw"]
+                @test isapprox(network["storage"]["1"]["ps"], -0.0447406; atol = 1e-3)
+                @test isapprox(network["storage"]["1"]["qs"], -0.0197284; atol = 1e-3)
+
+                @test isapprox(network["storage"]["2"]["ps"], -0.0595666; atol = 1e-3)
+                @test isapprox(network["storage"]["2"]["qs"],  0.0000000; atol = 1e-3)
+            end
+        end
+
+        @testset "test dc polar opf" begin
+            result = PowerModels.run_mn_strg_opf(mn_data, PowerModels.DCPPowerModel, ipopt_solver)
+
+            @test result["status"] == :LocalOptimal
+            @test isapprox(result["objective"], 69706.9; atol = 1e0)
+
+            for (n, network) in result["solution"]["nw"]
+                @test isapprox(network["storage"]["1"]["ps"], -0.0447992; atol = 1e-3)
+                @test isapprox(network["storage"]["2"]["ps"], -0.0596441; atol = 1e-3)
+            end
+        end
+
     end
 
 

@@ -2,6 +2,31 @@ PowerModels.jl Change Log
 =========================
 
 ### Staged
+- nothing
+
+### v0.9.0
+- Added LPAC cold-start approximation
+- Improved support for linear cost functions (breaking)
+- Reorganized power formulation types into core/types.jl
+- Added an abstract type for all active power only models
+- Minor revision of case5_clm, case5_npg and case5_strg test cases (breaking)
+- Minor revision of top-level storage constraints (#413)
+- Minor improvement to dictionary comprehensions
+- Fixed the interpretation of ncost in Matpower data (thanks to @lthurner)
+- Minor bug fix to line charging in check_branch_directions
+- Minor improvement to error messaging during pti parsing
+- Minor breaking changes #363, #391, #408, #429
+
+### v0.8.8
+- Added PowerModels specific replicate function
+- Improved storage component data validation checks
+
+### v0.8.7
+- Add support for Julia v0.7 and v1.0 (thanks to @jd-lara)
+
+### v0.8.6
+- Add support for a generic storage component
+- Added add_setpoint_fixed to improve solution reporting performance
 - Added support for a user provided JuMP model
 - Improved the Matpower data file export function
 

@@ -368,8 +368,6 @@ end
         @test PowerModels.con(pm, pm.cnw, pm.ccnd, :kcl_p, 1) == PowerModels.con(pm, :kcl_p, 1)
         @test length(PowerModels.con(pm)) == 4
 
-        @test length(PowerModels.ref(pm, pm.cnw)) == 40
-        @test length(PowerModels.ref(pm)) == 40
         @test PowerModels.ref(pm, pm.cnw, :bus, 1, "bus_i") == 1
         @test PowerModels.ref(pm, :bus, 1, "vmax") == 1.1
 
@@ -387,8 +385,8 @@ end
         angs_rad = mp_data["branch"]["1"]["angmin"]
 
         # Transpose
-        @test all((a').values == (a).values)
-        @test all(c' == RowVector([0.225, 0.225, 0.225]))
+        @test all(a' .== a)
+        @test all(c' .== [0.225, 0.225, 0.225]')
 
         # Basic Math (Matrices)
         x = a + b
@@ -443,7 +441,10 @@ end
         @test PowerModels.getmcv(a, 1, 1) == a[1,1]
 
         # diagm
-        @test all(LinearAlgebra.diagm(c).values .== [0.225 0.0 0.0; 0.0 0.225 0.0; 0.0 0.0 0.225])
+        @test all(LinearAlgebra.diagm(0 => c).values .== [0.225 0.0 0.0; 0.0 0.225 0.0; 0.0 0.0 0.225])
+        if VERSION <= v"0.7.0-"
+            @test all(LinearAlgebra.diagm(c).values .== [0.225 0.0 0.0; 0.0 0.225 0.0; 0.0 0.0 0.225])
+        end
 
         # rad2deg/deg2rad
         angs_deg = rad2deg(angs_rad)
@@ -460,12 +461,12 @@ end
         @test isa(deg2rad(a), PowerModels.MultiConductorMatrix)
 
         setlevel!(TESTLOG, "warn")
-        @test_nowarn show(DevNull, a)
+        @test_nowarn show(devnull, a)
 
         @test_nowarn a[1, 1] = 9.0
         @test a[1,1] == 9.0
 
-        @test_nowarn PowerModels.summary(DevNull, mp_data)
+        @test_nowarn PowerModels.summary(devnull, mp_data)
         setlevel!(TESTLOG, "error")
     end
 end

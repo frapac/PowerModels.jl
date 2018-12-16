@@ -133,6 +133,45 @@ function variable_voltage_magnitude_sqr_to_on_off(pm::GenericPowerModel; nw::Int
     )
 end
 
+""
+function variable_cosine(pm::GenericPowerModel; nw::Int=pm.cnw, cnd::Int=pm.ccnd)
+    cos_min = Dict((bp, -Inf) for bp in ids(pm, nw, :buspairs))
+    cos_max = Dict((bp,  Inf) for bp in ids(pm, nw, :buspairs))
+
+    for (bp, buspair) in ref(pm, nw, :buspairs)
+        angmin = buspair["angmin"][cnd]
+        angmax = buspair["angmax"][cnd]
+        if angmin >= 0
+            cos_max[bp] = cos(angmin)
+            cos_min[bp] = cos(angmax)
+        end
+        if angmax <= 0
+            cos_max[bp] = cos(angmax)
+            cos_min[bp] = cos(angmin)
+        end
+        if angmin < 0 && angmax > 0
+            cos_max[bp] = 1.0
+            cos_min[bp] = min(cos(angmin), cos(angmax))
+        end
+    end
+
+    var(pm, nw, cnd)[:cs] = @variable(pm.model,
+        [bp in ids(pm, nw, :buspairs)], base_name="$(nw)_$(cnd)_cs",
+        lower_bound = cos_min[bp],
+        upper_bound = cos_max[bp],
+        start = getval(ref(pm, nw, :buspairs, bp), "cs_start", cnd, 1.0)
+    )
+end
+
+""
+function variable_sine(pm::GenericPowerModel; nw::Int=pm.cnw, cnd::Int=pm.ccnd)
+    var(pm, nw, cnd)[:si] = @variable(pm.model,
+        [bp in ids(pm, nw, :buspairs)], base_name="$(nw)_$(cnd)_si",
+        lower_bound = sin(ref(pm, nw, :buspairs, bp, "angmin", cnd)),
+        upper_bound = sin(ref(pm, nw, :buspairs, bp, "angmax", cnd)),
+        start = getval(ref(pm, nw, :buspairs, bp), "si_start", cnd)
+    )
+end
 
 ""
 function variable_voltage_product(pm::GenericPowerModel; nw::Int=pm.cnw, cnd::Int=pm.ccnd, bounded = true)
@@ -166,7 +205,7 @@ end
 ""
 function variable_voltage_product_on_off(pm::GenericPowerModel; nw::Int=pm.cnw, cnd::Int=pm.ccnd)
     wr_min, wr_max, wi_min, wi_max = calc_voltage_product_bounds(ref(pm, nw, :buspairs), cnd)
-    bi_bp = Dict([(i, (b["f_bus"], b["t_bus"])) for (i,b) in ref(pm, nw, :branch)])
+    bi_bp = Dict((i, (b["f_bus"], b["t_bus"])) for (i,b) in ref(pm, nw, :branch))
 
     var(pm, nw, cnd)[:wr] = @variable(pm.model,
         [b in ids(pm, nw, :branch)], base_name="$(nw)_$(cnd)_wr",
@@ -311,7 +350,75 @@ function variable_reactive_dcline_flow(pm::GenericPowerModel; nw::Int=pm.cnw, cn
 end
 
 
+
+
+"variables for modeling storage units, includes grid injection and internal variables"
+function variable_storage(pm::GenericPowerModel; kwargs...)
+    variable_active_storage(pm; kwargs...)
+    variable_reactive_storage(pm; kwargs...)
+    variable_storage_energy(pm; kwargs...)
+    variable_storage_charge(pm; kwargs...)
+    variable_storage_discharge(pm; kwargs...)
+end
+
+""
+function variable_active_storage(pm::GenericPowerModel; nw::Int=pm.cnw, cnd::Int=pm.ccnd)
+    inj_lb, inj_ub = calc_storage_injection_bounds(ref(pm, nw, :storage), ref(pm, nw, :bus), cnd)
+
+    var(pm, nw, cnd)[:ps] = @variable(pm.model,
+        [i in ids(pm, nw, :storage)], basename="$(nw)_$(cnd)_ps",
+        lowerbound = inj_lb[i],
+        upperbound = inj_ub[i],
+        start = getval(ref(pm, nw, :storage, i), "ps_start", cnd)
+    )
+end
+
+""
+function variable_reactive_storage(pm::GenericPowerModel; nw::Int=pm.cnw, cnd::Int=pm.ccnd)
+    inj_lb, inj_ub = calc_storage_injection_bounds(ref(pm, nw, :storage), ref(pm, nw, :bus), cnd)
+
+    var(pm, nw, cnd)[:qs] = @variable(pm.model,
+        [i in ids(pm, nw, :storage)], basename="$(nw)_$(cnd)_qs",
+        lowerbound = max(inj_lb[i], ref(pm, nw, :storage, i, "qmin", cnd)),
+        upperbound = min(inj_ub[i], ref(pm, nw, :storage, i, "qmax", cnd)),
+        start = getval(ref(pm, nw, :storage, i), "qs_start", cnd)
+    )
+end
+
+""
+function variable_storage_energy(pm::GenericPowerModel; nw::Int=pm.cnw)
+    var(pm, nw)[:se] = @variable(pm.model,
+        [i in ids(pm, nw, :storage)], basename="$(nw)_se",
+        lowerbound = 0,
+        upperbound = ref(pm, nw, :storage, i, "energy_rating"),
+        start = getval(ref(pm, nw, :storage, i), "se_start", 1)
+    )
+end
+
+""
+function variable_storage_charge(pm::GenericPowerModel; nw::Int=pm.cnw)
+    var(pm, nw)[:sc] = @variable(pm.model,
+        [i in ids(pm, nw, :storage)], basename="$(nw)_sc",
+        lowerbound = 0,
+        upperbound = ref(pm, nw, :storage, i, "charge_rating"),
+        start = getval(ref(pm, nw, :storage, i), "sc_start", 1)
+    )
+end
+
+""
+function variable_storage_discharge(pm::GenericPowerModel; nw::Int=pm.cnw)
+    var(pm, nw)[:sd] = @variable(pm.model,
+        [i in ids(pm, nw, :storage)], basename="$(nw)_sd",
+        lowerbound = 0,
+        upperbound = ref(pm, nw, :storage, i, "discharge_rating"),
+        start = getval(ref(pm, nw, :storage, i), "sd_start", 1)
+    )
+end
+
+
+
 ##################################################################
+### Network Expantion Variables
 
 "generates variables for both `active` and `reactive` `branch_flow_ne`"
 function variable_branch_flow_ne(pm::GenericPowerModel; kwargs...)

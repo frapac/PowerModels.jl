@@ -1,5 +1,3 @@
-isdefined(Base, :__precompile__) && __precompile__()
-
 module PowerModels
 
 using JSON
@@ -12,25 +10,51 @@ using MathOptInterface
 const MOI = MathOptInterface
 const MOIU = MOI.Utilities
 
-import Compat: @__MODULE__
+using Compat.LinearAlgebra
+using Compat.SparseArrays
 
 if VERSION < v"0.7.0-"
+    import Compat: @__MODULE__
+
     import Compat: occursin
     import Compat: Nothing
     import Compat: round
     import Compat: findall
     import Compat: eachmatch
-    import Compat: LinearAlgebra
+    import Compat: undef
+    import Compat: pairs
+
+    LinearAlgebra = Compat.LinearAlgebra
+
+    mutable struct CholeskyResult
+        L::Any
+        p::Any
+    end
+
+    function cholesky(args...)
+        v = cholfact(args...)
+        return CholeskyResult(v[:L], v[:p])
+    end
 
     function eachmatch(r::Regex, s::AbstractString; overlap::Bool=false)
         return eachmatch(r, s, overlap)
     end
 
+    function pm_sum(v; dims::Int=0)
+        return sum(v, dims)
+    end
 end
 
 if VERSION > v"0.7.0-"
-    using LinearAlgebra
-    using SparseArrays
+    pm_sum = sum
+
+    function spdiagm(m, i::Int)
+        return sparse(SparseArrays.spdiagm_internal(i => m)...)
+    end
+
+    function ind2sub(x, i)
+        return Tuple(CartesianIndices(x)[i])
+    end
 end
 
 
@@ -49,6 +73,7 @@ include("io/psse.jl")
 include("core/data.jl")
 include("core/ref.jl")
 include("core/base.jl")
+include("core/types.jl")
 include("core/variable.jl")
 include("core/constraint_template.jl")
 include("core/constraint.jl")
@@ -60,7 +85,9 @@ include("core/multiconductor.jl")
 include("form/acp.jl")
 include("form/acr.jl")
 include("form/act.jl")
+include("form/apo.jl")
 include("form/dcp.jl")
+include("form/lpac.jl")
 include("form/bf.jl")
 include("form/wr.jl")
 include("form/wrm.jl")

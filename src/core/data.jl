@@ -2,6 +2,26 @@
 
 
 ""
+function calc_branch_t(branch::Dict{String,Any})
+    tap_ratio = branch["tap"]
+    angle_shift = branch["shift"]
+
+    tr = tap_ratio .* cos.(angle_shift)
+    ti = tap_ratio .* sin.(angle_shift)
+
+    return tr, ti
+end
+
+
+""
+function calc_branch_y(branch::Dict{String,Any})
+    y = pinv(branch["br_r"] + im * branch["br_x"])
+    g, b = real(y), imag(y)
+    return g, b
+end
+
+
+""
 function calc_theta_delta_bounds(data::Dict{String,Any})
     bus_count = length(data["bus"])
     branches = [branch for branch in values(data["branch"])]
@@ -51,22 +71,49 @@ end
 
 
 ""
-function calc_branch_t(branch::Dict{String,Any})
-    tap_ratio = branch["tap"]
-    angle_shift = branch["shift"]
-
-    tr = tap_ratio.*cos.(angle_shift)
-    ti = tap_ratio.*sin.(angle_shift)
-
-    return tr, ti
+function calc_max_cost_index(data::Dict{String,Any})
+    if InfrastructureModels.ismultinetwork(data)
+        max_index = 0
+        for (i,nw_data) in data["nw"]
+            nw_max_index = _calc_max_cost_index(nw_data)
+            max_index = max(max_index, nw_max_index)
+        end
+        return max_index
+    else
+        return _calc_max_cost_index(data)
+    end
 end
 
 
 ""
-function calc_branch_y(branch::Dict{String,Any})
-    y = pinv(branch["br_r"] + im * branch["br_x"])
-    g, b = real(y), imag(y)
-    return g, b
+function _calc_max_cost_index(data::Dict{String,Any})
+    max_index = 0
+
+    for (i,gen) in data["gen"]
+        if haskey(gen, "model")
+            if gen["model"] == 2
+                if haskey(gen, "cost")
+                    max_index = max(max_index, length(gen["cost"]))
+                end
+            else
+                warn(LOGGER, "skipping cost generator $(i) cost model in calc_cost_order, only model 2 is supported.")
+            end
+        end
+    end
+
+    for (i,dcline) in data["dcline"]
+        if haskey(dcline, "model")
+            if dcline["model"] == 2
+                if haskey(dcline, "cost")
+                    max_index = max(max_index, length(dcline["cost"]))
+                end
+            else
+                warn(LOGGER, "skipping cost dcline $(i) cost model in calc_cost_order, only model 2 is supported.")
+            end
+        end
+    end
+
+    return max_index
 end
 
 
@@ -115,6 +162,13 @@ function update_data(data::Dict{String,Any}, new_data::Dict{String,Any})
         end
     end
     InfrastructureModels.update_data!(data, new_data)
+end
+
+
+"calls the replicate function with PowerModels' global keys"
+function replicate(sn_data::Dict{String,Any}, count::Int; global_keys::Set{String}=Set{String}())
+    pm_global_keys = Set(["time_elapsed", "baseMVA", "per_unit"])
+    return InfrastructureModels.replicate(sn_data, count, global_keys=union(global_keys, pm_global_keys))
 end
 
 
@@ -180,13 +234,39 @@ function _make_per_unit(data::Dict{String,Any}, mva_base::Real)
         end
     end
 
+    if haskey(data, "gen")
+        for (i, gen) in data["gen"]
+            apply_func(gen, "pg", rescale)
+            apply_func(gen, "qg", rescale)
+
+            apply_func(gen, "pmax", rescale)
+            apply_func(gen, "pmin", rescale)
+
+            apply_func(gen, "qmax", rescale)
+            apply_func(gen, "qmin", rescale)
+
+            _rescale_cost_model(gen, mva_base)
+        end
+    end
+
+    if haskey(data, "storage")
+        for (i, strg) in data["storage"]
+            apply_func(strg, "energy", rescale)
+            apply_func(strg, "energy_rating", rescale)
+            apply_func(strg, "charge_rating", rescale)
+            apply_func(strg, "discharge_rating", rescale)
+            apply_func(strg, "thermal_rating", rescale)
+            apply_func(strg, "current_rating", rescale)
+            apply_func(strg, "qmin", rescale)
+            apply_func(strg, "qmax", rescale)
+            apply_func(strg, "standby_loss", rescale)
+        end
+    end
+
+
     branches = []
     if haskey(data, "branch")
         append!(branches, values(data["branch"]))
-    end
-    dclines =[]
-    if haskey(data, "dcline")
-        append!(dclines, values(data["dcline"]))
     end
 
     if haskey(data, "ne_branch")
@@ -215,36 +295,23 @@ function _make_per_unit(data::Dict{String,Any}, mva_base::Real)
         apply_func(branch, "mu_sm_to", rescale_dual)
     end
 
-    for dcline in dclines
-        apply_func(dcline, "loss0", rescale)
-        apply_func(dcline, "pf", rescale)
-        apply_func(dcline, "pt", rescale)
-        apply_func(dcline, "qf", rescale)
-        apply_func(dcline, "qt", rescale)
-        apply_func(dcline, "pmaxt", rescale)
-        apply_func(dcline, "pmint", rescale)
-        apply_func(dcline, "pmaxf", rescale)
-        apply_func(dcline, "pminf", rescale)
-        apply_func(dcline, "qmaxt", rescale)
-        apply_func(dcline, "qmint", rescale)
-        apply_func(dcline, "qmaxf", rescale)
-        apply_func(dcline, "qminf", rescale)
+    if haskey(data, "dcline")
+        for (i, dcline) in data["dcline"]
+            apply_func(dcline, "loss0", rescale)
+            apply_func(dcline, "pf", rescale)
+            apply_func(dcline, "pt", rescale)
+            apply_func(dcline, "qf", rescale)
+            apply_func(dcline, "qt", rescale)
+            apply_func(dcline, "pmaxt", rescale)
+            apply_func(dcline, "pmint", rescale)
+            apply_func(dcline, "pmaxf", rescale)
+            apply_func(dcline, "pminf", rescale)
+            apply_func(dcline, "qmaxt", rescale)
+            apply_func(dcline, "qmint", rescale)
+            apply_func(dcline, "qmaxf", rescale)
+            apply_func(dcline, "qminf", rescale)
 
-        _rescale_cost_model(dcline, mva_base)
-    end
-
-    if haskey(data, "gen")
-        for (i, gen) in data["gen"]
-            apply_func(gen, "pg", rescale)
-            apply_func(gen, "qg", rescale)
-
-            apply_func(gen, "pmax", rescale)
-            apply_func(gen, "pmin", rescale)
-
-            apply_func(gen, "qmax", rescale)
-            apply_func(gen, "qmin", rescale)
-
-            _rescale_cost_model(gen, mva_base)
+            _rescale_cost_model(dcline, mva_base)
         end
     end
 
@@ -300,14 +367,39 @@ function _make_mixed_units(data::Dict{String,Any}, mva_base::Real)
         end
     end
 
+    if haskey(data, "gen")
+        for (i, gen) in data["gen"]
+            apply_func(gen, "pg", rescale)
+            apply_func(gen, "qg", rescale)
+
+            apply_func(gen, "pmax", rescale)
+            apply_func(gen, "pmin", rescale)
+
+            apply_func(gen, "qmax", rescale)
+            apply_func(gen, "qmin", rescale)
+
+            _rescale_cost_model(gen, 1.0/mva_base)
+        end
+    end
+
+    if haskey(data, "storage")
+        for (i, strg) in data["storage"]
+            apply_func(strg, "energy", rescale)
+            apply_func(strg, "energy_rating", rescale)
+            apply_func(strg, "charge_rating", rescale)
+            apply_func(strg, "discharge_rating", rescale)
+            apply_func(strg, "thermal_rating", rescale)
+            apply_func(strg, "current_rating", rescale)
+            apply_func(strg, "qmin", rescale)
+            apply_func(strg, "qmax", rescale)
+            apply_func(strg, "standby_loss", rescale)
+        end
+    end
+
+
     branches = []
     if haskey(data, "branch")
         append!(branches, values(data["branch"]))
-    end
-
-    dclines =[]
-    if haskey(data, "dcline")
-        append!(dclines, values(data["dcline"]))
     end
 
     if haskey(data, "ne_branch")
@@ -336,36 +428,23 @@ function _make_mixed_units(data::Dict{String,Any}, mva_base::Real)
         apply_func(branch, "mu_sm_to", rescale_dual)
     end
 
-    for dcline in dclines
-        apply_func(dcline, "loss0", rescale)
-        apply_func(dcline, "pf", rescale)
-        apply_func(dcline, "pt", rescale)
-        apply_func(dcline, "qf", rescale)
-        apply_func(dcline, "qt", rescale)
-        apply_func(dcline, "pmaxt", rescale)
-        apply_func(dcline, "pmint", rescale)
-        apply_func(dcline, "pmaxf", rescale)
-        apply_func(dcline, "pminf", rescale)
-        apply_func(dcline, "qmaxt", rescale)
-        apply_func(dcline, "qmint", rescale)
-        apply_func(dcline, "qmaxf", rescale)
-        apply_func(dcline, "qminf", rescale)
+    if haskey(data, "dcline")
+        for (i,dcline) in data["dcline"]
+            apply_func(dcline, "loss0", rescale)
+            apply_func(dcline, "pf", rescale)
+            apply_func(dcline, "pt", rescale)
+            apply_func(dcline, "qf", rescale)
+            apply_func(dcline, "qt", rescale)
+            apply_func(dcline, "pmaxt", rescale)
+            apply_func(dcline, "pmint", rescale)
+            apply_func(dcline, "pmaxf", rescale)
+            apply_func(dcline, "pminf", rescale)
+            apply_func(dcline, "qmaxt", rescale)
+            apply_func(dcline, "qmint", rescale)
+            apply_func(dcline, "qmaxf", rescale)
+            apply_func(dcline, "qminf", rescale)
 
-        _rescale_cost_model(dcline, 1.0/mva_base)
-    end
-
-    if haskey(data, "gen")
-        for (i, gen) in data["gen"]
-            apply_func(gen, "pg", rescale)
-            apply_func(gen, "qg", rescale)
-
-            apply_func(gen, "pmax", rescale)
-            apply_func(gen, "pmin", rescale)
-
-            apply_func(gen, "qmax", rescale)
-            apply_func(gen, "qmin", rescale)
-
-            _rescale_cost_model(gen, 1.0/mva_base)
+            _rescale_cost_model(dcline, 1.0/mva_base)
         end
     end
 
@@ -595,6 +674,10 @@ function check_branch_directions(data::Dict{String,Any})
             branch_orginal = copy(branch)
             branch["f_bus"] = branch_orginal["t_bus"]
             branch["t_bus"] = branch_orginal["f_bus"]
+            branch["g_to"] = branch_orginal["g_fr"] .* branch_orginal["tap"]'.^2
+            branch["b_to"] = branch_orginal["b_fr"] .* branch_orginal["tap"]'.^2
+            branch["g_fr"] = branch_orginal["g_to"] ./ branch_orginal["tap"]'.^2
+            branch["b_fr"] = branch_orginal["b_to"] ./ branch_orginal["tap"]'.^2
             branch["tap"] = 1 ./ branch_orginal["tap"]
             branch["br_r"] = branch_orginal["br_r"] .* branch_orginal["tap"]'.^2
             branch["br_x"] = branch_orginal["br_x"] .* branch_orginal["tap"]'.^2
@@ -647,6 +730,12 @@ function check_connectivity(data::Dict{String,Any})
     for (i, gen) in data["gen"]
         if !(gen["gen_bus"] in bus_ids)
             error(LOGGER, "bus $(gen["gen_bus"]) in generator $(i) is not defined")
+        end
+    end
+
+    for (i, strg) in data["storage"]
+        if !(strg["storage_bus"] in bus_ids)
+            error(LOGGER, "bus $(strg["storage_bus"]) in storage unit $(i) is not defined")
         end
     end
 
@@ -717,13 +806,78 @@ function check_transformer_parameters(data::Dict{String,Any})
 end
 
 
+"""
+checks that each storage unit has a reasonable parameters
+"""
+function check_storage_parameters(data::Dict{String,Any})
+    if InfrastructureModels.ismultinetwork(data)
+        error("check_storage_parameters does not yet support multinetwork data")
+    end
+
+    for (i, strg) in data["storage"]
+        if strg["energy"] < 0.0
+            error(LOGGER, "storage unit $(strg["index"]) has a non-positive energy level $(strg["energy"])")
+        end
+        if strg["energy_rating"] < 0.0
+            error(LOGGER, "storage unit $(strg["index"]) has a non-positive energy rating $(strg["energy_rating"])")
+        end
+        if strg["charge_rating"] < 0.0
+            error(LOGGER, "storage unit $(strg["index"]) has a non-positive charge rating $(strg["energy_rating"])")
+        end
+        if strg["discharge_rating"] < 0.0
+            error(LOGGER, "storage unit $(strg["index"]) has a non-positive discharge rating $(strg["energy_rating"])")
+        end
+        if strg["r"] < 0.0
+            error(LOGGER, "storage unit $(strg["index"]) has a non-positive resistance $(strg["r"])")
+        end
+        if strg["x"] < 0.0
+            error(LOGGER, "storage unit $(strg["index"]) has a non-positive reactance $(strg["x"])")
+        end
+        if strg["standby_loss"] < 0.0
+            error(LOGGER, "storage unit $(strg["index"]) has a non-positive standby losses $(strg["standby_loss"])")
+        end
+
+        if haskey(strg, "thermal_rating") && strg["thermal_rating"] < 0.0
+            error(LOGGER, "storage unit $(strg["index"]) has a non-positive thermal rating $(strg["thermal_rating"])")
+        end
+        if haskey(strg, "current_rating") && strg["current_rating"] < 0.0
+            error(LOGGER, "storage unit $(strg["index"]) has a non-positive current rating $(strg["thermal_rating"])")
+        end
+
+
+        if strg["charge_efficiency"] < 0.0
+            error(LOGGER, "storage unit $(strg["index"]) has a non-positive charge efficiency of $(strg["charge_efficiency"])")
+        end
+        if strg["charge_efficiency"] <= 0.0 || strg["charge_efficiency"] > 1.0
+            warn(LOGGER, "storage unit $(strg["index"]) charge efficiency of $(strg["charge_efficiency"]) is out of the valid range (0.0. 1.0]")
+        end
+
+        if strg["discharge_efficiency"] < 0.0
+            error(LOGGER, "storage unit $(strg["index"]) has a non-positive discharge efficiency of $(strg["discharge_efficiency"])")
+        end
+        if strg["discharge_efficiency"] <= 0.0 || strg["discharge_efficiency"] > 1.0
+            warn(LOGGER, "storage unit $(strg["index"]) discharge efficiency of $(strg["discharge_efficiency"]) is out of the valid range (0.0. 1.0]")
+        end
+
+        if !isapprox(strg["x"], 0.0, atol=1e-6, rtol=1e-6)
+            warn(LOGGER, "storage unit $(strg["index"]) has a non-zero reactance $(strg["x"]), which is currently ignored")
+        end
+
+
+        if strg["standby_loss"] > 0.0 && strg["energy"] <= 0.0
+            warn(LOGGER, "storage unit $(strg["index"]) has standby losses but zero initial energy.  This can lead to model infeasiblity.")
+        end
+    end
+end
+
+
 "checks bus types are consistent with generator connections, if not, fixes them"
 function check_bus_types(data::Dict{String,Any})
     if InfrastructureModels.ismultinetwork(data)
         error("check_bus_types does not yet support multinetwork data")
     end
 
-    bus_gens = Dict([(i, []) for (i,bus) in data["bus"]])
+    bus_gens = Dict((i, []) for (i,bus) in data["bus"])
 
     for (i,gen) in data["gen"]
         #println(gen)
@@ -937,6 +1091,99 @@ function _simplify_pwl_cost(id, comp, type_name, tolerance = 1e-2)
         comp["ncost"] = length(smpl_cost)/2
     end
 end
+
+
+
+
+"ensures all polynomial costs functions have the same number of terms"
+function standardize_cost_terms(data::Dict{String,Any}; order=1)
+    comp_max_order = 1
+
+    if InfrastructureModels.ismultinetwork(data)
+        networks = data["nw"]
+    else
+        networks = [("0", data)]
+    end
+
+    for (i, network) in networks
+        if haskey(network, "gen")
+            for (i, gen) in network["gen"]
+                if haskey(gen, "model") && gen["model"] == 2
+                    max_nonzero_index = 1
+                    for i in 1:length(gen["cost"])
+                        max_nonzero_index = i
+                        if gen["cost"][i] != 0.0
+                            break
+                        end
+                    end
+
+                    max_oder = length(gen["cost"]) - max_nonzero_index + 1
+
+                    comp_max_order = max(comp_max_order, max_oder)
+                end
+            end
+        end
+
+        if haskey(network, "dclinecost")
+            if haskey(network, "dcline")
+                for (i, dcline) in network["dcline"]
+                    if haskey(dcline, "model") && dcline["model"] == 2
+                        max_nonzero_index = 1
+                        for i in 1:length(dcline["cost"])
+                            max_nonzero_index = i
+                            if dcline["cost"][i] != 0.0
+                                break
+                            end
+                        end
+
+                        max_oder = length(dcline["cost"]) - max_nonzero_index + 1
+
+                        comp_max_order = max(comp_max_order, max_oder)
+                    end
+                end
+            end
+        end
+
+    end
+
+    if comp_max_order <= order+1
+        comp_max_order = order+1
+    else
+        warn(LOGGER, "a standard cost order of $(order) was requested but the given data requires an order of at least $(comp_max_order-1)")
+    end
+
+    for (i, network) in networks
+        if haskey(network, "gen")
+            _standardize_cost_terms(network["gen"], comp_max_order, "generator")
+        end
+        if haskey(network, "dcline")
+            _standardize_cost_terms(network["dcline"], comp_max_order, "dcline")
+        end
+    end
+end
+
+
+"ensures all polynomial costs functions have at exactly comp_order terms"
+function _standardize_cost_terms(components::Dict{String,Any}, comp_order::Int, cost_comp_name::String)
+    for (i, comp) in components
+        if haskey(comp, "model") && comp["model"] == 2 && length(comp["cost"]) != comp_order
+            std_cost = [0.0 for i in 1:comp_order]
+            current_cost = reverse(comp["cost"])
+            #println("gen cost: $(comp["cost"])")
+            for i in 1:min(comp_order, length(current_cost))
+                std_cost[i] = current_cost[i]
+            end
+            comp["cost"] = reverse(std_cost)
+            comp["ncost"] = comp_order
+            #println("std gen cost: $(comp["cost"])")
+
+            warn(LOGGER, "Updated $(cost_comp_name) cost ($(comp["index"])) to a function of order $(comp_order): $(comp["cost"])")
+        end
+    end
+end
+
+
+
 
 
 """
@@ -1275,7 +1522,7 @@ function connected_components(data::Dict{String,Any})
         error("connected_components does not yet support multinetwork data")
     end
 
-    active_bus = Dict([x for x in data["bus"] if x.second["bus_type"] != 4])
+    active_bus = Dict(x for x in data["bus"] if x.second["bus_type"] != 4)
     #active_bus = filter((i, bus) -> bus["bus_type"] != 4, data["bus"])
     active_bus_ids = Set{Int64}([bus["bus_i"] for (i,bus) in active_bus])
     #println(active_bus_ids)
@@ -1341,8 +1588,9 @@ end
 
 "feild names that should not be multi-conductor values"
 conductorless = Set(["index", "bus_i", "bus_type", "status", "gen_status",
-    "br_status", "gen_bus", "load_bus", "shunt_bus", "f_bus", "t_bus",
-    "transformer", "area", "zone", "base_kv",
+    "br_status", "gen_bus", "load_bus", "shunt_bus", "storage_bus", "f_bus", "t_bus",
+    "transformer", "area", "zone", "base_kv", "energy", "energy_rating", "charge_rating",
+    "discharge_rating", "charge_efficiency", "discharge_efficiency", "standby_loss",
     "model", "ncost", "cost", "startup", "shutdown"])
 
 conductor_matrix = Set(["br_r", "br_x"])

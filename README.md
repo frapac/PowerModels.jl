@@ -22,6 +22,7 @@ This enables the definition of a wide variety of power network formulations and 
 **Core Network Formulations**
 * AC (polar and rectangular coordinates)
 * DC Approximation (polar coordinates)
+* LPAC Approximation (polar coordinates)
 * SDP Relaxation (W-space)
 * SOC Relaxation (W-space)
 * QC Relaxation (W+L-space)
@@ -51,10 +52,11 @@ Community-driven development and enhancement of PowerModels are welcome and enco
 This code has been developed as part of the Advanced Network Science Initiative at Los Alamos National Laboratory.
 The primary developer is Carleton Coffrin(@ccoffrin) with support from the following contributors,
 - Russell Bent (@rb004f) LANL, Matpower export, TNEP problem specification
+- Jose Daniel Lara (@jd-lara) Berkeley, Julia v1.0 compatibility
 - Hakan Ergun (@hakanergun) KU Leuven, HVDC lines
 - David Fobes (@pseudocubic) LANL, PSS(R)E v33 data support
 - Rory Finnegan (@rofinn) Invenia, Memento Logging
-- Frederik Geth (@frederikgeth) CSIRO, Branch Flow formulation
+- Frederik Geth (@frederikgeth) CSIRO, storage modeling advise, Branch Flow formulation
 - Jonas Kersulis (@kersulis) University of Michigan, Sparse SDP formulation
 - Miles Lubin (@mlubin) MIT, Julia/JuMP advise
 - Yeesian Ng (@yeesian) MIT, Documenter.jl setup

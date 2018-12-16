@@ -98,11 +98,8 @@
             case7_data = mn_mc_data["nw"]["1"]
             case14_data = mn_mc_data["nw"]["2"]
 
-            case7_active_buses = Dict([x for x in case7_data["bus"] if x.second["bus_type"] != 4])
-            case14_active_buses = Dict([x for x in case14_data["bus"] if x.second["bus_type"] != 4])
-
-            #case7_active_buses = filter((i, bus) -> bus["bus_type"] != 4, case7_data["bus"])
-            #case14_active_buses = filter((i, bus) -> bus["bus_type"] != 4, case14_data["bus"])
+            case7_active_buses = Dict(x for x in case7_data["bus"] if x.second["bus_type"] != 4)
+            case14_active_buses = Dict(x for x in case14_data["bus"] if x.second["bus_type"] != 4)
 
             @test length(case7_active_buses) == 3
             @test length(case14_active_buses) == 14
@@ -197,7 +194,7 @@
 
 
 
-    @testset "test multi-network multi-conductor opf variants" begin
+    @testset "test multi-network multi-conductor opf formulation variants" begin
         mn_mc_data = build_mn_mc_data("../test/data/matpower/case5_dc.m", "../test/data/matpower/case14.m", conductors_1=4, conductors_2=0)
 
         @testset "ac 5/14-bus case" begin
@@ -221,6 +218,42 @@
             @test isapprox(result["objective"], 69827.3; atol = 1e-1)
         end
 
+    end
+
+
+    @testset "test multi-network multi-conductor opf with storage" begin
+        mn_mc_data = build_mn_mc_data("../test/data/matpower/case5_strg.m")
+
+        @testset "ac 5-bus storage case" begin
+            result = PowerModels.run_mn_mc_strg_opf(mn_mc_data, PowerModels.ACPPowerModel, ipopt_solver)
+
+            @test result["status"] == :LocalOptimal
+            @test isapprox(result["objective"], 1.35456e5; atol = 1e2)
+        end
+
+        @testset "dc 5-bus storage case" begin
+            result = PowerModels.run_mn_mc_opf(mn_mc_data, PowerModels.DCPPowerModel, ipopt_solver)
+
+            @test result["status"] == :LocalOptimal
+            @test isapprox(result["objective"], 1.58593e5; atol = 1e2)
+        end
+
+        #=
+        # base case not yet implemented
+        @testset "soc 5-bus storage case" begin
+            result = PowerModels.run_mn_mc_opf(mn_mc_data, SOCWRPowerModel, ipopt_solver)
+
+            @test result["status"] == :LocalOptimal
+            @test isapprox(result["objective"], 69827.3; atol = 1e-1)
+        end
+        =#
+
+        @testset "nfa 5 bus storage case" begin
+            result = PowerModels.run_mn_mc_opf(mn_mc_data, PowerModels.NFAPowerModel, ipopt_solver)
+
+            @test result["status"] == :LocalOptimal
+            @test isapprox(result["objective"], 1.33302e5; atol = 1e2)
+        end
     end
 
 
