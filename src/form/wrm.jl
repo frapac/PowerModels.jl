@@ -137,7 +137,7 @@ function variable_voltage(pm::GenericPowerModel{T}; nw::Int=pm.cnw, cnd::Int=pm.
 
     voltage_product_groups =
         var(pm, nw, cnd)[:voltage_product_groups] =
-        Vector{Dict{Symbol, Array{JuMP.Variable, 2}}}(undef, length(groups))
+        Vector{Dict{Symbol, Array{JuMP.VariableRef, 2}}}(undef, length(groups))
         #Vector{Dict{Any,Any}}(length(groups))
 
     for (gidx, group) in enumerate(groups)

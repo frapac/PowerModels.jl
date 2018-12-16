@@ -366,9 +366,9 @@ function variable_active_storage(pm::GenericPowerModel; nw::Int=pm.cnw, cnd::Int
     inj_lb, inj_ub = calc_storage_injection_bounds(ref(pm, nw, :storage), ref(pm, nw, :bus), cnd)
 
     var(pm, nw, cnd)[:ps] = @variable(pm.model,
-        [i in ids(pm, nw, :storage)], basename="$(nw)_$(cnd)_ps",
-        lowerbound = inj_lb[i],
-        upperbound = inj_ub[i],
+        [i in ids(pm, nw, :storage)], base_name="$(nw)_$(cnd)_ps",
+        lower_bound = inj_lb[i],
+        upper_bound = inj_ub[i],
         start = getval(ref(pm, nw, :storage, i), "ps_start", cnd)
     )
 end
@@ -378,9 +378,9 @@ function variable_reactive_storage(pm::GenericPowerModel; nw::Int=pm.cnw, cnd::I
     inj_lb, inj_ub = calc_storage_injection_bounds(ref(pm, nw, :storage), ref(pm, nw, :bus), cnd)
 
     var(pm, nw, cnd)[:qs] = @variable(pm.model,
-        [i in ids(pm, nw, :storage)], basename="$(nw)_$(cnd)_qs",
-        lowerbound = max(inj_lb[i], ref(pm, nw, :storage, i, "qmin", cnd)),
-        upperbound = min(inj_ub[i], ref(pm, nw, :storage, i, "qmax", cnd)),
+        [i in ids(pm, nw, :storage)], base_name="$(nw)_$(cnd)_qs",
+        lower_bound = max(inj_lb[i], ref(pm, nw, :storage, i, "qmin", cnd)),
+        upper_bound = min(inj_ub[i], ref(pm, nw, :storage, i, "qmax", cnd)),
         start = getval(ref(pm, nw, :storage, i), "qs_start", cnd)
     )
 end
@@ -388,9 +388,9 @@ end
 ""
 function variable_storage_energy(pm::GenericPowerModel; nw::Int=pm.cnw)
     var(pm, nw)[:se] = @variable(pm.model,
-        [i in ids(pm, nw, :storage)], basename="$(nw)_se",
-        lowerbound = 0,
-        upperbound = ref(pm, nw, :storage, i, "energy_rating"),
+        [i in ids(pm, nw, :storage)], base_name="$(nw)_se",
+        lower_bound = 0,
+        upper_bound = ref(pm, nw, :storage, i, "energy_rating"),
         start = getval(ref(pm, nw, :storage, i), "se_start", 1)
     )
 end
@@ -398,9 +398,9 @@ end
 ""
 function variable_storage_charge(pm::GenericPowerModel; nw::Int=pm.cnw)
     var(pm, nw)[:sc] = @variable(pm.model,
-        [i in ids(pm, nw, :storage)], basename="$(nw)_sc",
-        lowerbound = 0,
-        upperbound = ref(pm, nw, :storage, i, "charge_rating"),
+        [i in ids(pm, nw, :storage)], base_name="$(nw)_sc",
+        lower_bound = 0,
+        upper_bound = ref(pm, nw, :storage, i, "charge_rating"),
         start = getval(ref(pm, nw, :storage, i), "sc_start", 1)
     )
 end
@@ -408,9 +408,9 @@ end
 ""
 function variable_storage_discharge(pm::GenericPowerModel; nw::Int=pm.cnw)
     var(pm, nw)[:sd] = @variable(pm.model,
-        [i in ids(pm, nw, :storage)], basename="$(nw)_sd",
-        lowerbound = 0,
-        upperbound = ref(pm, nw, :storage, i, "discharge_rating"),
+        [i in ids(pm, nw, :storage)], base_name="$(nw)_sd",
+        lower_bound = 0,
+        upper_bound = ref(pm, nw, :storage, i, "discharge_rating"),
         start = getval(ref(pm, nw, :storage, i), "sd_start", 1)
     )
 end
@@ -452,7 +452,7 @@ function variable_branch_indicator(pm::GenericPowerModel; nw::Int=pm.cnw, cnd::I
         [l in ids(pm, nw, :branch)], base_name="$(nw)_$(cnd)_branch_z",
         lower_bound = 0,
         upper_bound = 1,
-        category = :Int,
+        binary = true,
         start = getval(ref(pm, nw, :branch, l), "branch_z_start", cnd, 1.0)
     )
 end

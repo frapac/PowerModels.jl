@@ -1,6 +1,6 @@
 name = "PowerModels"
 uuid = "c36e90e8-916a-50a6-bd94-075b64ef4655"
-version = "v0.8.4"
+version = "v0.9.0"
 
 [deps]
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"

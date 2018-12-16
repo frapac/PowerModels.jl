@@ -2,17 +2,15 @@ using PowerModels
 using InfrastructureModels
 using Memento
 
-using MathProgBase
-
 # Suppress warnings during testing.
 setlevel!(getlogger(InfrastructureModels), "error")
 setlevel!(getlogger(PowerModels), "error")
 
-#using Cbc
+using Cbc
 using Ipopt
 using SCS
-using Pavito
-using Juniper
+#using Pavito
+#using Juniper
 using Compat
 
 using JuMP
@@ -30,7 +28,7 @@ using JuMP
 
 # default setup for solvers
 ipopt_solver = with_optimizer(Ipopt.Optimizer, tol=1e-6, print_level=0)
-#cbc_solver = CbcSolver()
+#cbc_solver = with_optimizer(Cbc.Optimizer)
 #juniper_solver = JuniperSolver(IpoptSolver(tol=1e-4, print_level=0), mip_solver=cbc_solver, log_levels=[])
 #juniper_solver = JuniperSolver(IpoptSolver(tol=1e-4, print_level=0), mip_solver=cbc_solver)
 #pavito_solver = PavitoSolver(mip_solver=cbc_solver, cont_solver=ipopt_solver, mip_solver_drives=false, log_level=0)

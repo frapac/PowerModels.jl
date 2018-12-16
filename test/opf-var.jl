@@ -156,12 +156,12 @@ end
             result = PowerModels.run_strg_opf("../test/data/matpower/case5_strg.m", PowerModels.ACPPowerModel, ipopt_solver)
 
             @test result["status"] == :LocalOptimal
-            @test isapprox(result["objective"], 17039.7; atol = 1e0)
+            @test isapprox(result["objective"], 17273.0; atol = 1e0)
 
             @test isapprox(result["solution"]["storage"]["1"]["se"],  0.0; atol = 1e0)
             @test isapprox(result["solution"]["storage"]["1"]["ps"], -0.176572; atol = 1e-2)
             @test isapprox(result["solution"]["storage"]["2"]["se"],  0.0; atol = 1e0)
-            @test isapprox(result["solution"]["storage"]["2"]["ps"], -0.233351; atol = 1e-2)
+            @test isapprox(result["solution"]["storage"]["2"]["ps"],  0.0; atol = 1e-2)
         end
     end
 

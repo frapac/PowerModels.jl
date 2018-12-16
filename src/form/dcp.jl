@@ -199,6 +199,9 @@ end
 
 "nothing to do, this model is symetric"
 function constraint_thermal_limit_to(pm::GenericPowerModel{T}, n::Int, c::Int, t_idx, rate_a) where T <: DCPlosslessForm
+    l,i,j = t_idx
+    p_fr = var(pm, n, c, :p, (l,j,i))
+    con(pm, n, c, :sm_to)[l] = JuMP.UpperBoundRef(p_fr)
 end
 
 "nothing to do, this model is symetric"
