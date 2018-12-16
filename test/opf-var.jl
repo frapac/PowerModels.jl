@@ -151,8 +151,8 @@ end
 
 @testset "test storage opf" begin
 
-    # remove for test stablity
     #=
+    # remove for test stability (non-standard ipopt starting point?)
     @testset "test ac polar opf" begin
         @testset "5-bus case" begin
             result = PowerModels.run_strg_opf("../test/data/matpower/case5_strg.m", PowerModels.ACPPowerModel, ipopt_solver)
