@@ -90,10 +90,10 @@ function GenericPowerModel(data::Dict{String,Any}, T::DataType; ext = Dict{Symbo
         else
             jump_model = Model(optimizer)
         end
-    end
-
-    if jump_model != nothing && optimizer != nothing
-        warn(LOGGER, "the provided optimizer will not be used because a JuMP model was provided, the optimizer provided with the JuMP model will be used.")
+    else
+        if optimizer != nothing
+            warn(LOGGER, "the provided optimizer will not be used because a JuMP model was provided, the optimizer provided with the JuMP model will be used.")
+        end
     end
 
     pm = GenericPowerModel{T}(
